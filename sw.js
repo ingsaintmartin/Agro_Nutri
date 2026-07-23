@@ -1,4 +1,4 @@
-const CACHE_NAME = 'agronutri-v2';
+const CACHE_NAME = 'agronutri-v3';
 const ASSETS = [
   './',
   './index.html',

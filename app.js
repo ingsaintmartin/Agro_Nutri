@@ -80,7 +80,7 @@ function navigateTo(screen, opts = {}) {
 
   // Topbar title
   const titles = {
-    home: null, calculator: 'Calculadora', 'dosis-ppm': 'Dosis ➔ ppm Suelo', crops: 'Base de Cultivos',
+    home: null, calculator: 'Calculadora', 'dosis-ppm': 'Dosis ➔ ppm Suelo', 'plant-doctor': 'Diagnóstico por Foto', crops: 'Base de Cultivos',
     fertilizers: 'Fertilizantes', history: 'Historial', ai: 'Consultor IA'
   };
   const titleEl = el('topbar-title');
@@ -110,6 +110,7 @@ function renderScreen(name, opts = {}) {
     case 'home':        container.innerHTML = renderHome(); break;
     case 'calculator':  container.innerHTML = renderCalculator(); attachCalcEvents(); break;
     case 'dosis-ppm':   container.innerHTML = renderDosisToPpm(); attachDosisPpmEvents(); break;
+    case 'plant-doctor':container.innerHTML = renderPlantDoctor(); attachPlantDoctorEvents(); break;
     case 'crops':       container.innerHTML = renderCrops(); break;
     case 'fertilizers': container.innerHTML = renderFertilizers(); break;
     case 'history':     container.innerHTML = renderHistory(); attachHistoryEvents(); break;
@@ -161,6 +162,15 @@ function renderHome() {
         <div>
           <h3>Calcular NPK</h3>
           <p>Calcular dosis necesaria</p>
+        </div>
+      </div>
+      <div class="action-card" onclick="navigateTo('plant-doctor')">
+        <div class="action-icon purple">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="13" r="4" stroke="currentColor" stroke-width="2"/></svg>
+        </div>
+        <div>
+          <h3>Diagnóstico Foto</h3>
+          <p>Detección de enfermedades</p>
         </div>
       </div>
       <div class="action-card" onclick="navigateTo('dosis-ppm')">
@@ -535,6 +545,192 @@ function runDosisPpmCalc() {
         <span>1 ppm ≈ ${(soilMassKg/1e6).toFixed(2)} kg/ha de nutriente</span>
       </div>
     </div>`;
+}
+
+}
+
+// ── PLANT DOCTOR (AI VISION DIAGNOSIS) ─────────────
+let pdSelectedImageBase64 = null;
+let pdSelectedMimeType = 'image/jpeg';
+
+function renderPlantDoctor() {
+  const hasKey = !!state.geminiApiKey;
+  return `
+  <div class="screen">
+    <div class="card">
+      <h3 style="font-size:16px; font-weight:700; color:var(--c-accent); margin-bottom:8px">📸 Diagnóstico Fitosanitario por Foto</h3>
+      <p style="font-size:13px; color:var(--c-text-2); margin-bottom:16px; line-height:1.5">
+        Sacá una foto a la hoja, tallo o fruto afectado (cultivos agrícolas o plantas de jardín) para identificar enfermedades, plagas o deficiencias nutricionales con Inteligencia Artificial.
+      </p>
+
+      ${!hasKey ? `
+      <div class="api-key-banner">
+        <strong>⚠️ API Key de Gemini requerida</strong>
+        Ingresá tu API Key de Gemini para activar la visión por cámara.
+      </div>
+      <div class="form-group" style="margin-bottom:12px">
+        <input class="form-input" id="pd-key-input" type="password" placeholder="AIza..." />
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="saveApiKeyFromPd()" style="margin-bottom:16px">
+        Guardar API Key
+      </button>
+      ` : ''}
+
+      <input type="file" id="pd-file-input" accept="image/*" capture="environment" style="display:none" />
+
+      <div id="pd-upload-area" style="border:2px dashed var(--c-border); border-radius:var(--radius); padding:24px; text-align:center; cursor:pointer; background:var(--c-bg); transition:border-color 0.2s">
+        <svg width="44" height="44" viewBox="0 0 24 24" fill="none" style="margin-bottom:8px; color:var(--c-primary)"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" stroke="currentColor" stroke-width="2"/><circle cx="12" cy="13" r="4" stroke="currentColor" stroke-width="2"/></svg>
+        <div style="font-weight:600; font-size:15px; margin-bottom:4px">Tomar Foto o Seleccionar de Galería</div>
+        <div style="font-size:12px; color:var(--c-text-3)">Hacé clic aquí para abrir la cámara del teléfono</div>
+      </div>
+
+      <div id="pd-preview-container" class="hidden" style="margin-top:16px; text-align:center">
+        <img id="pd-img-preview" style="max-width:100%; max-height:260px; border-radius:var(--radius-sm); border:1px solid var(--c-border); object-fit:cover" />
+        <button class="btn btn-secondary btn-sm" id="btn-pd-change-img" style="margin-top:8px">
+          🔄 Cambiar foto
+        </button>
+      </div>
+
+      <div class="form-group" style="margin-top:16px">
+        <label class="form-label">Nota o síntoma adicional (Opcional)</label>
+        <input class="form-input" id="pd-notes" placeholder="Ej. Hojas inferiores en Maíz V6 con amarillamiento..." />
+      </div>
+    </div>
+
+    <button class="btn btn-primary" id="btn-pd-analyze" ${!hasKey ? 'disabled' : ''}>
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      Diagnosticar Imagen
+    </button>
+
+    <div id="pd-result-area"></div>
+  </div>`;
+}
+
+function saveApiKeyFromPd() {
+  const k = el('pd-key-input')?.value.trim();
+  if (!k) { showToast('⚠️ Ingresá una clave válida'); return; }
+  state.geminiApiKey = k;
+  localStorage.setItem('gemini_api_key', k);
+  showToast('✅ Clave guardada');
+  navigateTo('plant-doctor');
+}
+
+function attachPlantDoctorEvents() {
+  const uploadArea = el('pd-upload-area');
+  const fileInput = el('pd-file-input');
+  const changeBtn = el('btn-pd-change-img');
+  const analyzeBtn = el('btn-pd-analyze');
+
+  if (uploadArea && fileInput) {
+    uploadArea.addEventListener('click', () => fileInput.click());
+    changeBtn?.addEventListener('click', () => fileInput.click());
+
+    fileInput.addEventListener('change', e => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      pdSelectedMimeType = file.type || 'image/jpeg';
+      const reader = new FileReader();
+      reader.onload = function(evt) {
+        const fullDataUrl = evt.target.result;
+        pdSelectedImageBase64 = fullDataUrl.split(',')[1];
+
+        el('pd-img-preview').src = fullDataUrl;
+        el('pd-upload-area').classList.add('hidden');
+        el('pd-preview-container').classList.remove('hidden');
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  analyzeBtn?.addEventListener('click', runPlantDoctorAnalysis);
+}
+
+async function runPlantDoctorAnalysis() {
+  if (!pdSelectedImageBase64) {
+    showToast('⚠️ Por favor tomá o seleccioná una foto primero');
+    return;
+  }
+  if (!state.geminiApiKey) {
+    showToast('⚠️ Se requiere API Key de Gemini');
+    return;
+  }
+
+  const notes = el('pd-notes')?.value.trim() || '';
+  const resultArea = el('pd-result-area');
+
+  resultArea.innerHTML = `
+    <div class="result-card" style="text-align:center; padding:32px 16px">
+      <div class="splash-spinner" style="margin:0 auto 16px auto"></div>
+      <h4 style="color:var(--c-accent); font-size:16px; margin-bottom:6px">Analizando síntomas con IA...</h4>
+      <p style="font-size:12px; color:var(--c-text-2)">Gemini Vision está examinando la imagen y patrones foliares.</p>
+    </div>`;
+
+  resultArea.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  try {
+    const systemPrompt = `Sos un agrónomo fitopatólogo, botánico y especialista en protección vegetal en Sudamérica. 
+Analizás la imagen provista de la planta o cultivo (agrícola u ornamental).
+Da tu diagnóstico claro y bien estructurado en español usando exactamente estos encabezados en negrita:
+
+🌱 **ESPECIE / CULTIVO IDENTIFICADO**
+🦠 **DIAGNÓSTICO FITOSANITARIO** (Indicar enfermedad, plaga o deficiencia nutricional)
+📊 **NIVEL DE CERTEZA / GRAVEDAD**
+🔍 **SÍNTOMAS OBSERVADOS EN LA IMAGEN**
+🛡️ **RECOMENDACIÓN Y MANEJO** (Manejo integrado, productos sugeridos, riego o fertilización)
+
+Sé directo, práctico y profesional.`;
+
+    const promptText = `Analizá esta imagen. ${notes ? 'Nota del usuario: ' + notes : ''}`;
+
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${state.geminiApiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents: [
+            {
+              role: 'user',
+              parts: [
+                { inlineData: { mimeType: pdSelectedMimeType, data: pdSelectedImageBase64 } },
+                { text: promptText }
+              ]
+            }
+          ]
+        })
+      }
+    );
+
+    if (!response.ok) {
+      const errData = await response.json();
+      throw new Error(errData.error?.message || 'Error al comunicarse con Gemini');
+    }
+
+    const data = await response.json();
+    const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text || 'No se pudo generar un diagnóstico.';
+
+    // Format Markdown bolding & line breaks
+    const formattedHtml = resultText
+      .replace(/\*\*(.*?)\*\*/g, '<strong style="color:var(--c-accent)">$1</strong>')
+      .replace(/\n/g, '<br>');
+
+    resultArea.innerHTML = `
+      <div class="result-card" style="line-height:1.6; font-size:14px">
+        <h3 style="font-size:17px; font-weight:700; color:var(--c-accent); margin-bottom:14px">📋 Informe de Diagnóstico Fitosanitario</h3>
+        <div style="color:var(--c-text); background:rgba(0,0,0,0.2); padding:16px; border-radius:var(--radius-sm); border:1px solid var(--c-border)">
+          ${formattedHtml}
+        </div>
+      </div>`;
+
+  } catch (err) {
+    resultArea.innerHTML = `
+      <div class="card" style="border-color:var(--c-danger); margin-top:16px">
+        <h4 style="color:var(--c-danger); font-weight:700; margin-bottom:6px">⚠️ Error en el diagnóstico</h4>
+        <p style="font-size:13px; color:var(--c-text-2)">${err.message}</p>
+      </div>`;
+  }
 }
 
 function saveAnalysis() {
