@@ -547,8 +547,6 @@ function runDosisPpmCalc() {
     </div>`;
 }
 
-}
-
 // ── PLANT DOCTOR (AI VISION DIAGNOSIS) ─────────────
 let pdSelectedImageBase64 = null;
 let pdSelectedMimeType = 'image/jpeg';
