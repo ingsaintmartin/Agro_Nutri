@@ -80,7 +80,7 @@ function navigateTo(screen, opts = {}) {
 
   // Topbar title
   const titles = {
-    home: null, calculator: 'Calculadora', crops: 'Base de Cultivos',
+    home: null, calculator: 'Calculadora', 'dosis-ppm': 'Dosis ➔ ppm Suelo', crops: 'Base de Cultivos',
     fertilizers: 'Fertilizantes', history: 'Historial', ai: 'Consultor IA'
   };
   const titleEl = el('topbar-title');
@@ -109,6 +109,7 @@ function renderScreen(name, opts = {}) {
   switch (name) {
     case 'home':        container.innerHTML = renderHome(); break;
     case 'calculator':  container.innerHTML = renderCalculator(); attachCalcEvents(); break;
+    case 'dosis-ppm':   container.innerHTML = renderDosisToPpm(); attachDosisPpmEvents(); break;
     case 'crops':       container.innerHTML = renderCrops(); break;
     case 'fertilizers': container.innerHTML = renderFertilizers(); break;
     case 'history':     container.innerHTML = renderHistory(); attachHistoryEvents(); break;
@@ -159,7 +160,16 @@ function renderHome() {
         </div>
         <div>
           <h3>Calcular NPK</h3>
-          <p>Calcular dosis de fertilizante</p>
+          <p>Calcular dosis necesaria</p>
+        </div>
+      </div>
+      <div class="action-card" onclick="navigateTo('dosis-ppm')">
+        <div class="action-icon orange">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M7 16V4M7 4L3 8M7 4L11 8M17 8V20M17 20L21 16M17 20L13 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+        <div>
+          <h3>Dosis ➔ ppm</h3>
+          <p>Convertir kg/ha a ppm</p>
         </div>
       </div>
       <div class="action-card" onclick="navigateTo('crops')">
@@ -404,6 +414,127 @@ function runCalculation() {
 
   el('btn-save').classList.remove('hidden');
   el('calc-result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ── DOSIS ➔ PPM CALCULATOR ────────────────────────
+function renderDosisToPpm() {
+  return `
+  <div class="screen">
+    <div class="card">
+      <h3 style="font-size:16px; font-weight:700; color:var(--c-accent); margin-bottom:12px">🔄 Conversor: Dosis (kg/ha) ➔ ppm en Suelo</h3>
+      <p style="font-size:13px; color:var(--c-text-2); margin-bottom:16px; line-height:1.5">
+        Calculá cuántas partes por millón (ppm) de cada nutriente estás incorporando al suelo al aplicar una determinada cantidad de fertilizante.
+      </p>
+
+      <div class="form-group">
+        <label class="form-label">Fertilizante</label>
+        <select class="form-select" id="dp-fert">
+          ${FERTILIZERS.map((f,i) => `<option value="${i}">${f.name} (${f.formula})</option>`).join('')}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Dosis a aplicar</label>
+        <div class="input-unit-wrap">
+          <input class="form-input" id="dp-dose" type="number" step="10" value="100" />
+          <span class="input-unit">kg/ha</span>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Profundidad suelo</label>
+          <div class="input-unit-wrap">
+            <input class="form-input" id="dp-depth" type="number" step="5" value="20" />
+            <span class="input-unit">cm</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Densidad aparente</label>
+          <div class="input-unit-wrap">
+            <input class="form-input" id="dp-density" type="number" step="0.05" value="1.25" />
+            <span class="input-unit">g/cm³</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn btn-primary" id="btn-calc-dp">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><path d="M7 16V4M7 4L3 8M7 4L11 8M17 8V20M17 20L21 16M17 20L13 16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Calcular ppm Aportadas
+    </button>
+
+    <div id="dp-result"></div>
+  </div>`;
+}
+
+function attachDosisPpmEvents() {
+  el('btn-calc-dp')?.addEventListener('click', runDosisPpmCalc);
+  el('dp-fert')?.addEventListener('change', runDosisPpmCalc);
+  el('dp-dose')?.addEventListener('input', runDosisPpmCalc);
+  runDosisPpmCalc();
+}
+
+function runDosisPpmCalc() {
+  const fert = FERTILIZERS[parseInt(el('dp-fert').value)];
+  const dose = parseFloat(el('dp-dose').value) || 0;
+  const depth = parseFloat(el('dp-depth').value) || 20;
+  const density = parseFloat(el('dp-density').value) || 1.25;
+
+  // Mass of 1 ha of soil in kg: depth(cm) * density(g/cm3) * 100,000
+  const soilMassKg = depth * density * 100000; // e.g. 20 * 1.25 * 100000 = 2,500,000 kg
+
+  const nKg = dose * (fert.nContent / 100);
+  const p2o5Kg = dose * (fert.pContent / 100);
+  const pElemKg = p2o5Kg * 0.4364; // Elemental P
+  const k2oKg = dose * (fert.kContent / 100);
+  const sKg = dose * (fert.sulfurContent / 100);
+
+  const ppmN = (nKg / soilMassKg) * 1e6;
+  const ppmP2O5 = (p2o5Kg / soilMassKg) * 1e6;
+  const ppmP = (pElemKg / soilMassKg) * 1e6;
+  const ppmK2O = (k2oKg / soilMassKg) * 1e6;
+  const ppmS = (sKg / soilMassKg) * 1e6;
+
+  el('dp-result').innerHTML = `
+    <div class="result-card">
+      <h3>📈 ppm incorporadas al suelo (${depth} cm)</h3>
+      <div class="npk-grid">
+        <div class="npk-item n">
+          <div class="el">Nitrógeno (N)</div>
+          <div class="val">+${ppmN.toFixed(1)}</div>
+          <div class="unit">ppm (${nKg.toFixed(1)} kg N/ha)</div>
+        </div>
+        <div class="npk-item p">
+          <div class="el">Fósforo (P₂O₅)</div>
+          <div class="val">+${ppmP2O5.toFixed(1)}</div>
+          <div class="unit">ppm (${p2o5Kg.toFixed(1)} kg P₂O₅/ha)</div>
+        </div>
+        <div class="npk-item k">
+          <div class="el">Potasio (K₂O)</div>
+          <div class="val">+${ppmK2O.toFixed(1)}</div>
+          <div class="unit">ppm (${k2oKg.toFixed(1)} kg K₂O/ha)</div>
+        </div>
+      </div>
+
+      <div class="result-detail-row">
+        <span>Fósforo elemental (P)</span>
+        <span style="color:var(--c-p)">+${ppmP.toFixed(1)} ppm (${pElemKg.toFixed(1)} kg P/ha)</span>
+      </div>
+      ${sKg > 0 ? `
+      <div class="result-detail-row">
+        <span>Azufre (S)</span>
+        <span style="color:var(--c-warn)">+${ppmS.toFixed(1)} ppm (${sKg.toFixed(1)} kg S/ha)</span>
+      </div>` : ''}
+      <div class="result-detail-row" style="margin-top:10px; border-top:1px solid rgba(255,255,255,0.08); padding-top:10px">
+        <span>Masa de suelo considerada</span>
+        <span>${(soilMassKg/1000).toLocaleString('es-AR')} t/ha</span>
+      </div>
+      <div class="result-detail-row">
+        <span>Equivalencia agronómica</span>
+        <span>1 ppm ≈ ${(soilMassKg/1e6).toFixed(2)} kg/ha de nutriente</span>
+      </div>
+    </div>`;
 }
 
 function saveAnalysis() {
