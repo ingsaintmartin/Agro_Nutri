@@ -682,7 +682,8 @@ Sé directo, práctico y profesional.`;
     const promptText = `Analizá esta imagen. ${notes ? 'Nota del usuario: ' + notes : ''}`;
 
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${state.geminiApiKey}`,
+      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${estado.geminiApiKey}`,
+
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
