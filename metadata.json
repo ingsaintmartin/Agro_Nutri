@@ -1,0 +1,6 @@
+{
+  "name": "AgroNutri",
+  "description": "Aplicación agronómica para análisis de nutrientes en suelos y recomendaciones de fertilización en kg/ha.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
