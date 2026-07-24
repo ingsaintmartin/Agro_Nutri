@@ -681,34 +681,54 @@ Sé directo, práctico y profesional.`;
 
     const promptText = `Analizá esta imagen. ${notes ? 'Nota del usuario: ' + notes : ''}`;
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key=${state.geminiApiKey}`,
+    // Lista de modelos para probar en orden de preferencia
+    const modelsToTry = [
+      'gemini-2.0-flash',
+      'gemini-1.5-flash',
+      'gemini-1.5-pro'
+    ];
 
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          contents: [
-            {
-              role: 'user',
-              parts: [
-                { inlineData: { mimeType: pdSelectedMimeType, data: pdSelectedImageBase64 } },
-                { text: promptText }
+    let resultText = null;
+    let lastError = null;
+
+    for (const model of modelsToTry) {
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${state.geminiApiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              systemInstruction: { parts: [{ text: systemPrompt }] },
+              contents: [
+                {
+                  role: 'user',
+                  parts: [
+                    { inlineData: { mimeType: pdSelectedMimeType, data: pdSelectedImageBase64 } },
+                    { text: promptText }
+                  ]
+                }
               ]
-            }
-          ]
-        })
-      }
-    );
+            })
+          }
+        );
 
-    if (!response.ok) {
-      const errData = await response.json();
-      throw new Error(errData.error?.message || 'Error al comunicarse con Gemini');
+        if (response.ok) {
+          const data = await response.json();
+          resultText = data.candidates?.[0]?.content?.parts?.[0]?.text || 'No se pudo generar un diagnóstico.';
+          break;
+        }
+
+        const errData = await response.json();
+        lastError = errData.error?.message || `Error con modelo ${model}`;
+      } catch (err) {
+        lastError = err.message;
+      }
     }
 
-    const data = await response.json();
-    const resultText = data.candidates?.[0]?.content?.parts?.[0]?.text || 'No se pudo generar un diagnóstico.';
+    if (!resultText) {
+      throw new Error(lastError || 'No se pudo conectar con Gemini. Verificá tu API key.');
+    }
 
     // Format Markdown bolding & line breaks
     const formattedHtml = resultText
@@ -1032,25 +1052,40 @@ Usás unidades del sistema métrico (kg/ha, ppm, t/ha). Cuando sea relevante, me
       parts: [{ text: m.text }]
     }));
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${state.geminiApiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          contents: conversationHistory,
-        })
-      }
-    );
+    const modelsToTry = ['gemini-2.0-flash', 'gemini-1.5-flash', 'gemini-1.5-pro'];
+    let aiText = null;
+    let lastError = null;
 
-    if (!response.ok) {
-      const err = await response.json();
-      throw new Error(err.error?.message || 'Error de API');
+    for (const model of modelsToTry) {
+      try {
+        const response = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${state.geminiApiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              systemInstruction: { parts: [{ text: systemPrompt }] },
+              contents: conversationHistory,
+            })
+          }
+        );
+
+        if (response.ok) {
+          const data = await response.json();
+          aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Sin respuesta.';
+          break;
+        }
+
+        const err = await response.json();
+        lastError = err.error?.message || `Error con modelo ${model}`;
+      } catch (err) {
+        lastError = err.message;
+      }
     }
 
-    const data = await response.json();
-    const aiText = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Sin respuesta.';
+    if (!aiText) {
+      throw new Error(lastError || 'No se pudo conectar con Gemini.');
+    }
 
     el('typing')?.classList.add('hidden');
     state.chatHistory.push({ text: aiText, isUser: false });
@@ -1058,7 +1093,7 @@ Usás unidades del sistema métrico (kg/ha, ppm, t/ha). Cuando sea relevante, me
 
   } catch (err) {
     el('typing')?.classList.add('hidden');
-    const errMsg = `Error: ${err.message}. Verificá tu API key en aistudio.google.com`;
+    const errMsg = `Error: ${err.message}`;
     appendChatMsg(errMsg, false);
   }
 
